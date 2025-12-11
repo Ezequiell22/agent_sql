@@ -1,29 +1,30 @@
-import pyodbc
 import json
+import os
 import pandas as pd
 from dotenv import load_dotenv, find_dotenv
-import os
-from urllib.parse import quote_plus
-from sqlalchemy import create_engine
+from config import get_engine, get_allowed_tables
 
 _ = load_dotenv(find_dotenv())
 
-odbc_str = quote_plus(
-    f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-    f"SERVER={os.getenv('SERVER_DB')};"
-    f"DATABASE={os.getenv('DATABASE')};"
-    f"UID={os.getenv('USER_DB')};"
-    f"PWD={os.getenv('PASS_DB')};"
-)
-tabelas = [
-    "SE1010" , "SB1010", "SA1010" , "SD1010", "SF2010" , "SF1010" , "SE2010"
-]
+engine = get_engine()
 
-connection_string = f"mssql+pyodbc:///?odbc_connect={odbc_str}"
-engine = create_engine(connection_string)
+def list_tables():
+    allowed = get_allowed_tables()
+    if allowed:
+        return allowed
+    q = """
+    SELECT TOP 50 TABLE_NAME
+    FROM INFORMATION_SCHEMA.TABLES
+    WHERE TABLE_TYPE='BASE TABLE' AND TABLE_SCHEMA='dbo'
+    ORDER BY TABLE_NAME
+    """
+    rows = pd.read_sql_query(q, engine)
+    return [r["TABLE_NAME"] for _, r in rows.iterrows()]
 
+
+os.makedirs("dataset", exist_ok=True)
 with open("dataset/sql_schema.jsonl", "w", encoding="utf-8") as f:
-    for tabela in tabelas:
+    for tabela in list_tables():
         try:
             print(f"🔎 Processando {tabela}...")
             df = pd.read_sql(f"SELECT TOP 10000 * FROM {tabela}", engine)
